@@ -8,6 +8,14 @@ import site_info
 
 from anime import Anime
 
+
+class SearchException(Exception):
+    def __init__(self, message):
+        self.message = message
+    def __str__(self):
+        return self.message
+
+
 class AnimeSearcher:
 
     def __init__(self):
@@ -21,7 +29,7 @@ class AnimeSearcher:
 
         err = soup.find('h2', class_='hl-msg-jump-tit')
         if err:
-            raise Exception("search failed")
+            raise SearchException("search failed")
 
         l = soup.find_all('a', class_='hl-item-thumb hl-lazy')
         if not l:
