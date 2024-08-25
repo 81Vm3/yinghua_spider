@@ -1,3 +1,5 @@
+import io
+
 import requests
 import sys
 import os
@@ -5,6 +7,7 @@ import json
 
 from bs4 import BeautifulSoup
 import site_info
+
 
 class Anime:
     __save_folder = 'save'
@@ -80,6 +83,18 @@ class Anime:
         }
         return json.dumps(j, indent=4)
 
+    def get_cover(self):
+        r = requests.get(self.img, stream=True)
+        r.raise_for_status()  # Check for any errors in the response
+        image_data = io.BytesIO()  # Create an in-memory bytes buffer
+
+        # Write the image data directly to memory
+        for chunk in r.iter_content(chunk_size=16 * 1024):
+            image_data.write(chunk)
+
+        image_data.seek(0)  # Reset the buffer position to the start
+        return image_data  # Return the in-memory image data
+
     def save(self):
         os.makedirs(Anime.__save_folder, exist_ok=True)
         if not Anime.__folder_checked:
@@ -90,14 +105,12 @@ class Anime:
         t = f"{Anime.__save_folder}/{str(self.day)}/"
 
         try:
+            raw = self.get_cover()
             image = f'{t}{self.name}.webp'
 
             if not os.path.exists(image):
-                r = requests.get(self.img, stream=True)
                 with open(image, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=16 * 1024):
-                        f.write(chunk)
-                f.close()
+                    f.write(raw.getvalue())
 
             n = f'{t}{self.name}.txt'
             with open(n, 'w') as f:
