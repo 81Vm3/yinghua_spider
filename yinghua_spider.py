@@ -3,18 +3,10 @@ from bs4 import BeautifulSoup
 
 import site_info
 from anime import Anime
+from anime_search import AnimeSearcher
+
 from type_counter import TypeCounter
 
-header = {
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9",
-    "Accept-Encoding": "gzip, deflate",
-    "Accept-Language": "en-US,en;q=0.9",
-    "Cache-Control": "max-age=0",
-    "Connectin": "keep-alive",
-    "Host": "2.2.2.2",
-    "Upgrade-Insecure-Requests": "1",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36 Edg/95.0.1020.53",
-}
 
 day_chs = [
     "周一",
@@ -56,32 +48,8 @@ def main():
 
     print("爬取主页中...")
 
-    response = requests.get(site_info.url, headers=header)
-    response.encoding = 'utf-8'
-
-    soup = BeautifulSoup(response.text, "html.parser")
-    div_tag = soup.find('div', id='conch-content')
-
-    rows = div_tag.find('div', class_='row')
-
-    table = []
-    cnt = 0
-
-    print("正在分析主页数据...")
-
-    for day in rows:
-        items = day.find_all('a', class_='hl-item-thumb hl-lazy')
-        table.append([])
-        for it in items:
-            table[cnt].append(
-                Anime(
-                    cnt+1,
-                    it['title'],
-                    it['href'],
-                    it['data-original']
-                )
-            )
-        cnt += 1
+    a = AnimeSearcher()
+    table = a.search_week()
 
     if opt == -1:
         for i in range(0, 7):
