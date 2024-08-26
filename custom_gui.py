@@ -5,11 +5,13 @@ from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLineEdit, QHBoxLayout, QLabel, QListWidget,
-    QListWidgetItem, QMessageBox, QComboBox
+    QListWidgetItem, QMessageBox, QComboBox,
+    QProgressBar
 )
+
 from PIL import Image
 from anime_search import AnimeSearcher, SearchException
-
+from type_counter import TypeCounter
 
 class SpiderApp:
     def __init__(self):
@@ -48,6 +50,18 @@ class SpiderApp:
         week_layout.setStretch(1, 1)
         left_layout.addLayout(week_layout)
 
+        self.save_json_button = QPushButton('保存右侧所有动漫信息到json')
+        self.save_json_button.clicked.connect(self.save_json_button_clicked)
+        left_layout.addWidget(self.save_json_button)
+
+        self.wordcloud_button = QPushButton('导出右侧所有动漫类型的词云')
+        self.wordcloud_button.clicked.connect(self.wordcloud_button_clicked)
+        left_layout.addWidget(self.wordcloud_button)
+
+        # left_layout.addWidget(QLabel('进度'))
+        # self.progress_bar = QProgressBar()
+        # left_layout.addWidget(self.progress_bar)
+
         # Right layout
         right_layout = QVBoxLayout()
         right_layout.addWidget(QLabel('动漫详情 (双击获取详细信息)'), alignment=Qt.AlignTop | Qt.AlignLeft)
@@ -77,19 +91,31 @@ class SpiderApp:
         self.info_director.setWordWrap(True)
         self.info_director_main.setWordWrap(True)
         self.info_type.setWordWrap(True)
-        info_left.addWidget(self.info_cover)
-        info_right.addWidget(self.info_director)
-        info_right.addWidget(self.info_director_main)
-        info_right.addWidget(self.info_type)
-        info_right.addWidget(self.info_language)
-        info_right.addWidget(self.info_year)
-        info_right.addWidget(self.info_duration)
-        info_right.addWidget(self.info_time)
-        info_right.addWidget(self.info_status)
-        info_right.addWidget(self.info_update)
+        info_right.addWidget(self.info_cover)
+        info_left.addWidget(self.info_director)
+        info_left.addWidget(self.info_director_main)
+        info_left.addWidget(self.info_type)
+        info_left.addWidget(self.info_language)
+        info_left.addWidget(self.info_year)
+        info_left.addWidget(self.info_duration)
+        info_left.addWidget(self.info_time)
+        info_left.addWidget(self.info_status)
+        info_left.addWidget(self.info_update)
 
-        info_layout.addLayout(info_right)
+        self.save_json_button_single = QPushButton('保存JSON')
+        info_right.addWidget(self.save_json_button_single)
+        self.save_json_button_single.clicked.connect(self.save_json_button_single_clicked)
+
+        self.save_cover_button = QPushButton('保存封面')
+        info_right.addWidget(self.save_cover_button)
+        self.save_cover_button.clicked.connect(self.save_cover_button_clicked)
+
+        self.save_video_button = QPushButton('下载选集')
+        info_right.addWidget(self.save_video_button)
+        self.save_video_button.clicked.connect(self.save_video_button_clicked)
+
         info_layout.addLayout(info_left)
+        info_layout.addLayout(info_right)
         info_layout.setStretch(0, 1)
         info_layout.setStretch(1, 1)
         # info_layout.addStretch(1)
@@ -108,10 +134,42 @@ class SpiderApp:
         split_view.setStretch(1, 1)
 
         self.window.setLayout(split_view)
+        self.hide_buttons()
         self.window.show()
 
     def getApp(self):
         return self.__app
+
+    def show_message_box(self, type, text):
+        msg = QMessageBox()
+        msg.setIcon(type)
+        msg.setText(text)
+        msg.setWindowTitle("提示")
+        msg.setStandardButtons(QMessageBox.Ok)
+        msg.exec_()
+
+    def clear_anime_view(self):
+        self.info_director.clear()
+        self.info_director_main.clear()
+        self.info_type.clear()
+        self.info_language.clear()
+        self.info_year.clear()
+        self.info_duration.clear()
+        self.info_time.clear()
+        self.info_status.clear()
+        self.info_update.clear()
+        self.info_cover.clear()
+        self.hide_buttons()
+
+    def hide_buttons(self):
+        self.save_cover_button.hide()
+        self.save_json_button_single.hide()
+        self.save_video_button.hide()
+
+    def show_buttons(self):
+        self.save_cover_button.show()
+        self.save_json_button_single.show()
+        self.save_video_button.show()
 
     def search_anime(self):
         text = self.search_input.text()
@@ -121,29 +179,22 @@ class SpiderApp:
                 r = a.search(text)
                 if len(r) > 0:
                     self.anime_list.clear()
+                    self.clear_anime_view()
                     for it in r:
                         list_item = QListWidgetItem(it.name)
                         list_item.setData(Qt.UserRole, QVariant(it))
                         self.anime_list.addItem(list_item)
                 else:
-                    msg = QMessageBox()
-                    msg.setIcon(QMessageBox.Information)
-                    msg.setText("没有搜索到内容捏~ 再试一次咯")
-                    msg.setWindowTitle("搜索")
-                    msg.setStandardButtons(QMessageBox.Ok)
-                    msg.exec_()
+                    self.show_message_box(QMessageBox.Information, '没有搜索到内容捏~ 再试一次咯')
+
             except SearchException:
-                msg = QMessageBox()
-                msg.setIcon(QMessageBox.Critical)
-                msg.setText("你急什么！等下再搜索")
-                msg.setWindowTitle("错误")
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.exec_()
+                self.show_message_box(QMessageBox.Critical, '你急什么！等下再搜索')
 
     def week_search_anime_clicked(self):
         a = AnimeSearcher()
         table = a.search_week()
         self.anime_list.clear()
+        self.clear_anime_view()
 
         index = self.week_search_list.currentIndex()
         if index == 0:
@@ -190,10 +241,47 @@ class SpiderApp:
                 )
                 self.info_cover.setPixmap(scaled_pixmap)
                 self.info_cover.setAlignment(Qt.AlignCenter)
+                self.show_buttons()
+
             except Exception as e:
                 print(f"Error loading image: {e}")
                 self.info_cover.setText("无法加载图片")
 
+    def dump_anime_list(self):
+        return [self.anime_list.item(x).data(Qt.UserRole) for x in range(self.anime_list.count())]
+
+    def save_json_button_clicked(self):
+        a = self.dump_anime_list()
+        if len(a) > 0:
+            for it in a:
+                it.get_info()
+                it.save_to_json()
+
+    def wordcloud_button_clicked(self):
+        a = self.dump_anime_list()
+        if len(a) > 0:
+            for it in a:
+                it.get_info()
+
+            t = TypeCounter(a)
+            t.show_wordcloud()
+
+    def save_cover_button_clicked(self):
+        d = self.anime_list.selectedItems()[0]
+        if d:
+            a = d.data(Qt.UserRole)
+            a.save_cover()
+            self.show_message_box(QMessageBox.Information, '封面已保存到 save 文件夹下')
+
+    def save_json_button_single_clicked(self):
+        d = self.anime_list.selectedItems()[0]
+        if d:
+            a = d.data(Qt.UserRole)
+            a.save_to_json()
+            self.show_message_box(QMessageBox.Information, 'json 已保存到 save 文件夹下')
+
+    def save_video_button_clicked(self):
+        pass
 
 if __name__ == '__main__':
     app = SpiderApp()

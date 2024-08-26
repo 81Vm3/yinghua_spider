@@ -6,6 +6,8 @@ import os
 import json
 
 from bs4 import BeautifulSoup
+from PIL import Image
+
 import site_info
 
 
@@ -13,24 +15,30 @@ class Anime:
     __save_folder = 'save'
     __folder_checked = False
 
-    status = ''
-    director = ''
-    director_main = ''
-    year = ''
-    country = ''
-    language = ''
-    type = ''
-    duration = ''
-    time = ''
-    update = ''
-
     def __init__(self, day, name, url, img):
+        self.status = ''
+        self.director = ''
+        self.director_main = ''
+        self.year = ''
+        self.country = ''
+        self.language = ''
+        self.type = ''
+        self.duration = ''
+        self.time = ''
+        self.update = ''
+        self.has_info = False
+        self.has_cover = False
+        self.image_data = io.BytesIO()
+
         self.day = day
         self.name = name
         self.url = url
         self.img = img
 
     def get_info(self):
+        if self.has_info:
+            return
+
         response = requests.get(site_info.url + self.url)
         response.encoding = 'utf-8'
 
@@ -53,6 +61,7 @@ class Anime:
         self.time = m['上映']
         self.language = m['语言']
         self.update = m['更新']
+        self.has_info = True
 
     def show(self):
         print('作品:' + self.name)
@@ -70,6 +79,7 @@ class Anime:
                 'image': self.img
             },
             'info': {
+                'name': self.name,
                 'director': self.director,
                 'director_main': self.director_main,
                 'type': self.type,
@@ -83,17 +93,34 @@ class Anime:
         }
         return json.dumps(j, indent=4)
 
+    def save_to_json(self):
+        d = self.to_json()
+        os.makedirs(Anime.__save_folder, exist_ok=True)
+
+        with open(f'{Anime.__save_folder}/{self.name}.json', 'w') as f:
+            f.write(d)
+
     def get_cover(self):
+        if self.has_cover:
+            return self.image_data
+
         r = requests.get(self.img, stream=True)
         r.raise_for_status()  # Check for any errors in the response
-        image_data = io.BytesIO()  # Create an in-memory bytes buffer
 
         # Write the image data directly to memory
         for chunk in r.iter_content(chunk_size=16 * 1024):
-            image_data.write(chunk)
+            self.image_data.write(chunk)
 
-        image_data.seek(0)  # Reset the buffer position to the start
-        return image_data  # Return the in-memory image data
+        self.image_data.seek(0)  # Reset the buffer position to the start
+        self.has_cover = True
+        return self.image_data  # Return the in-memory image data
+
+    def save_cover(self):
+        os.makedirs(Anime.__save_folder, exist_ok=True)
+        raw = self.get_cover()  # io.ByteIO
+
+        image = Image.open(raw).convert("RGB")
+        image.save(f'{Anime.__save_folder}/{self.name}.jpg', 'jpeg')
 
     def save(self):
         os.makedirs(Anime.__save_folder, exist_ok=True)
