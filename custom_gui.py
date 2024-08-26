@@ -283,6 +283,3 @@ class SpiderApp:
     def save_video_button_clicked(self):
         pass
 
-if __name__ == '__main__':
-    app = SpiderApp()
-    app.getApp().exec_()
