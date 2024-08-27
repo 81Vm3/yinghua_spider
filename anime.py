@@ -35,6 +35,8 @@ class Anime:
         self.url = url
         self.img = img
 
+        self.video_links = []
+
     def get_info(self):
         if self.has_info:
             return
@@ -121,6 +123,21 @@ class Anime:
 
         image = Image.open(raw).convert("RGB")
         image.save(f'{Anime.__save_folder}/{self.name}.jpg', 'jpeg')
+
+    # 目前仅支持获取单线路的视频
+    def get_video_links(self):
+        r = requests.get(f'{site_info.url}/{self.url}')
+        r.raise_for_status()
+
+        r.encoding = 'utf-8'
+        soup = BeautifulSoup(r.text, "html.parser")
+        videos = soup.find_all('li', class_='hl-col-xs-4 hl-col-sm-2')
+
+        self.video_links.clear()
+        for it in videos:
+            if it.text.find('集') != -1:
+                a = it.find('a')
+                self.video_links.append(a['href'])
 
     def save(self):
         os.makedirs(Anime.__save_folder, exist_ok=True)

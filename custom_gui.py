@@ -10,6 +10,8 @@ from PyQt5.QtWidgets import (
 )
 
 from PIL import Image
+
+import site_info
 from anime_search import AnimeSearcher, SearchException
 from type_counter import TypeCounter
 
@@ -57,6 +59,9 @@ class SpiderApp:
         self.wordcloud_button = QPushButton('导出右侧所有动漫类型的词云')
         self.wordcloud_button.clicked.connect(self.wordcloud_button_clicked)
         left_layout.addWidget(self.wordcloud_button)
+
+        self.downloader_window = DownloaderWindow()
+        left_layout.addWidget(self.downloader_window)
 
         # left_layout.addWidget(QLabel('进度'))
         # self.progress_bar = QProgressBar()
@@ -110,7 +115,7 @@ class SpiderApp:
         info_right.addWidget(self.save_cover_button)
         self.save_cover_button.clicked.connect(self.save_cover_button_clicked)
 
-        self.save_video_button = QPushButton('下载选集')
+        self.save_video_button = QPushButton('获取选集')
         info_right.addWidget(self.save_video_button)
         self.save_video_button.clicked.connect(self.save_video_button_clicked)
 
@@ -140,9 +145,10 @@ class SpiderApp:
     def getApp(self):
         return self.__app
 
-    def show_message_box(self, type, text):
+    @staticmethod
+    def show_message_box(icon_type, text):
         msg = QMessageBox()
-        msg.setIcon(type)
+        msg.setIcon(icon_type)
         msg.setText(text)
         msg.setWindowTitle("提示")
         msg.setStandardButtons(QMessageBox.Ok)
@@ -160,6 +166,7 @@ class SpiderApp:
         self.info_update.clear()
         self.info_cover.clear()
         self.hide_buttons()
+        self.downloader_window.clear_combo()
 
     def hide_buttons(self):
         self.save_cover_button.hide()
@@ -213,6 +220,8 @@ class SpiderApp:
     def on_anime_item_clicked(self, item):
         selected_anime = item.data(Qt.UserRole)
         if selected_anime:
+            self.downloader_window.clear_combo()
+
             selected_anime.get_info()
             raw = selected_anime.get_cover()
             self.info_director.setText('主演:' + selected_anime.director)
@@ -266,20 +275,68 @@ class SpiderApp:
             t = TypeCounter(a)
             t.show_wordcloud()
 
-    def save_cover_button_clicked(self):
+    def get_selected_anime(self):
         d = self.anime_list.selectedItems()[0]
         if d:
-            a = d.data(Qt.UserRole)
+            return d.data(Qt.UserRole)
+        return None
+
+    def save_cover_button_clicked(self):
+        a = self.get_selected_anime()
+        if a:
             a.save_cover()
             self.show_message_box(QMessageBox.Information, '封面已保存到 save 文件夹下')
 
     def save_json_button_single_clicked(self):
-        d = self.anime_list.selectedItems()[0]
-        if d:
-            a = d.data(Qt.UserRole)
+        a = self.get_selected_anime()
+        if a:
             a.save_to_json()
             self.show_message_box(QMessageBox.Information, 'json 已保存到 save 文件夹下')
 
     def save_video_button_clicked(self):
-        pass
+        a = self.get_selected_anime()
+        if a:
+            a.get_video_links()
+            l = a.video_links
+            if len(l) > 0:
+                self.downloader_window.update_combo(l)
+            else:
+                self.show_message_box(QMessageBox.Critical, '没有找到选集')
 
+
+class DownloaderWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        self.link_info = []
+
+        # -------------- 下载选集的窗口 ---------------
+        layout = QHBoxLayout()
+        self.download_video_button = QPushButton('下载')
+        self.download_video_button.clicked.connect(self.download_video_button_clicked)
+        layout.addWidget(self.download_video_button)
+
+        self.combo = QComboBox()
+        layout.addWidget(self.combo)
+
+        super().setLayout(layout)
+
+    def clear_combo(self):
+        self.combo.clear()
+
+    def download_video_button_clicked(self):
+        if self.combo.count() == 0:
+            SpiderApp.show_message_box(QMessageBox.Information, '在右侧先点击\"获取选集\"')
+        else:
+            index = self.combo.currentIndex()
+            link = self.link_info[index]
+            print('link is ' + f'{site_info.url}/{link}')
+
+    def update_combo(self, links: list):
+        self.link_info = links
+
+        self.combo.clear()
+        i = 1
+        for it in links:
+            self.combo.addItem(f'第{i}集')
+            i += 1
