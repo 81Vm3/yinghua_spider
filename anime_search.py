@@ -21,7 +21,7 @@ class AnimeSearcher:
         pass
 
     def search(self, text):
-        response = requests.get(site_info.search + text)
+        response = requests.get(site_info.search + text,  headers=site_info.header)
         response.encoding = 'utf-8'
 
         soup = BeautifulSoup(response.text, "html.parser")

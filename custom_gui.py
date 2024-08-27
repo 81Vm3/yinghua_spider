@@ -6,7 +6,8 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QPushButton,
     QLineEdit, QHBoxLayout, QLabel, QListWidget,
     QListWidgetItem, QMessageBox, QComboBox,
-    QProgressBar
+    QProgressBar,
+    QTextEdit
 )
 
 from PIL import Image
@@ -14,6 +15,7 @@ from PIL import Image
 import site_info
 from anime_search import AnimeSearcher, SearchException
 from type_counter import TypeCounter
+from video_downloader import VideoDownloader
 
 class SpiderApp:
     def __init__(self):
@@ -59,9 +61,6 @@ class SpiderApp:
         self.wordcloud_button = QPushButton('导出右侧所有动漫类型的词云')
         self.wordcloud_button.clicked.connect(self.wordcloud_button_clicked)
         left_layout.addWidget(self.wordcloud_button)
-
-        self.downloader_window = DownloaderWindow()
-        left_layout.addWidget(self.downloader_window)
 
         # left_layout.addWidget(QLabel('进度'))
         # self.progress_bar = QProgressBar()
@@ -115,10 +114,6 @@ class SpiderApp:
         info_right.addWidget(self.save_cover_button)
         self.save_cover_button.clicked.connect(self.save_cover_button_clicked)
 
-        self.save_video_button = QPushButton('获取选集')
-        info_right.addWidget(self.save_video_button)
-        self.save_video_button.clicked.connect(self.save_video_button_clicked)
-
         info_layout.addLayout(info_left)
         info_layout.addLayout(info_right)
         info_layout.setStretch(0, 1)
@@ -127,6 +122,9 @@ class SpiderApp:
 
         right_layout.addLayout(list_layout)
         right_layout.addLayout(info_layout)
+
+        self.downloader_window = DownloaderWindow()
+        right_layout.addWidget(self.downloader_window)
 
         right_layout.setStretch(1, 2)
         right_layout.setStretch(2, 3)
@@ -171,12 +169,12 @@ class SpiderApp:
     def hide_buttons(self):
         self.save_cover_button.hide()
         self.save_json_button_single.hide()
-        self.save_video_button.hide()
+        self.downloader_window.hide()
 
     def show_buttons(self):
         self.save_cover_button.show()
         self.save_json_button_single.show()
-        self.save_video_button.show()
+        self.downloader_window.show()
 
     def search_anime(self):
         text = self.search_input.text()
@@ -220,10 +218,13 @@ class SpiderApp:
     def on_anime_item_clicked(self, item):
         selected_anime = item.data(Qt.UserRole)
         if selected_anime:
-            self.downloader_window.clear_combo()
 
             selected_anime.get_info()
             raw = selected_anime.get_cover()
+
+            self.downloader_window.clear_combo()
+            self.downloader_window.update_combo(selected_anime.video_links)
+
             self.info_director.setText('主演:' + selected_anime.director)
             self.info_director_main.setText('导演:' + selected_anime.director_main)
             self.info_type.setText('类型:' + selected_anime.type)
@@ -293,17 +294,6 @@ class SpiderApp:
             a.save_to_json()
             self.show_message_box(QMessageBox.Information, 'json 已保存到 save 文件夹下')
 
-    def save_video_button_clicked(self):
-        a = self.get_selected_anime()
-        if a:
-            a.get_video_links()
-            l = a.video_links
-            if len(l) > 0:
-                self.downloader_window.update_combo(l)
-            else:
-                self.show_message_box(QMessageBox.Critical, '没有找到选集')
-
-
 class DownloaderWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -319,6 +309,8 @@ class DownloaderWindow(QWidget):
         self.combo = QComboBox()
         layout.addWidget(self.combo)
 
+        self.status_window = DownloaderStatusWindow()
+
         super().setLayout(layout)
 
     def clear_combo(self):
@@ -326,11 +318,22 @@ class DownloaderWindow(QWidget):
 
     def download_video_button_clicked(self):
         if self.combo.count() == 0:
-            SpiderApp.show_message_box(QMessageBox.Information, '在右侧先点击\"获取选集\"')
+            pass
         else:
-            index = self.combo.currentIndex()
-            link = self.link_info[index]
-            print('link is ' + f'{site_info.url}/{link}')
+            try:
+                index = self.combo.currentIndex()
+                link = self.link_info[index]
+                d = VideoDownloader(link)
+                player = d.get_video_player_link()
+                if len(player) > 0:
+                    encrypted_url = d.get_encrypted_url(player)
+                    if len(encrypted_url) > 0:
+                        decrypted_url = d.decrypt_url(encrypted_url)
+                        self.status_window.update_text(decrypted_url)
+                        self.status_window.show()
+
+            except Exception as e:
+                SpiderApp.show_message_box(QMessageBox.Critical, "无法下载视频: " + str(e))
 
     def update_combo(self, links: list):
         self.link_info = links
@@ -340,3 +343,22 @@ class DownloaderWindow(QWidget):
         for it in links:
             self.combo.addItem(f'第{i}集')
             i += 1
+
+class DownloaderStatusWindow(QWidget):
+    def __init__(self):
+        super().__init__()
+
+        layout = QVBoxLayout()
+
+        self.info_label = QLabel('解密完成，你可以复制下面的url到浏览器下载\n 或者点下面的按钮，用爬虫单线下载并保存到本地(可能会造成卡顿)')
+        self.text_edit = QTextEdit()
+        self.text_edit.setReadOnly(True)
+        self.download_button = QPushButton('单线下载')
+
+        layout.addWidget(self.info_label)
+        layout.addWidget(self.text_edit)
+        layout.addWidget(self.download_button)
+        super().setLayout(layout)
+
+    def update_text(self, text):
+        self.text_edit.setText(text)
