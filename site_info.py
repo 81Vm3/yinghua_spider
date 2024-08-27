@@ -12,3 +12,9 @@ header = {
     "Upgrade-Insecure-Requests": "1",
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/95.0.4638.69 Safari/537.36 Edg/95.0.1020.53",
 }
+
+# 该网站的视频播放器，流量通过cdn，如cdn更新，则需要更新此url..
+video_player = 'https://play.yhcdn.top/?url='
+
+# 解密URL所用的密钥
+AESKey = 'ArtplayerliUlanG'
