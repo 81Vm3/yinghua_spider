@@ -5,6 +5,7 @@
 使用方法: `python3 yinghua_spider.py`
 
 ![Preview](preview.png)
+![Preview](preview2.png)
 
 *史一样的GUI*
 
@@ -19,10 +20,10 @@ wordcloud, matplotlib
 4. 可以分批保存Json
 5. 可以搜索动漫并查看分集
 6. 使用PyQT5的GUI
-7. 可以根据搜索的动漫类型生成词云图
-8. **反爬**: 爬取播放器并对后端返回的AES URL进行解密
+7. 可以下载视频，支持线路1线路2 (线路1经常崩)
+8. 可以根据搜索的动漫类型生成词云图
+9. **反爬**: 爬取线路1播放器并对后端返回的AES URL进行解密
 
 todo:
-1. 下载视频
-2. excel分析
-3. 多线程下载器
+1. excel分析
+2. 多线程下载器
