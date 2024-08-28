@@ -1,4 +1,5 @@
 import io
+import os
 import sys
 from PyQt5.QtCore import Qt, QVariant
 from PyQt5.QtGui import QPixmap, QImage
@@ -11,11 +12,14 @@ from PyQt5.QtWidgets import (
 )
 
 from PIL import Image
+import codecs
 
 import site_info
+from anime import Anime
 from anime_search import AnimeSearcher, SearchException
 from type_counter import TypeCounter
-from video_downloader import VideoDownloader
+from video_downloader import VideoDownloader, DownloaderWorker
+
 
 class SpiderApp:
     def __init__(self):
@@ -223,7 +227,7 @@ class SpiderApp:
             raw = selected_anime.get_cover()
 
             self.downloader_window.clear_combo()
-            self.downloader_window.update_combo(selected_anime.video_links)
+            self.downloader_window.update_combo(selected_anime.video_links, selected_anime.video_strs)
 
             self.info_director.setText('主演:' + selected_anime.director)
             self.info_director_main.setText('导演:' + selected_anime.director_main)
@@ -264,8 +268,11 @@ class SpiderApp:
         a = self.dump_anime_list()
         if len(a) > 0:
             for it in a:
-                it.get_info()
-                it.save_to_json()
+                try:
+                    it.get_info()
+                    it.save_to_json()
+                except Exception as e:
+                    print(e)
 
     def wordcloud_button_clicked(self):
         a = self.dump_anime_list()
@@ -293,6 +300,7 @@ class SpiderApp:
         if a:
             a.save_to_json()
             self.show_message_box(QMessageBox.Information, 'json 已保存到 save 文件夹下')
+
 
 class DownloaderWindow(QWidget):
     def __init__(self):
@@ -326,23 +334,34 @@ class DownloaderWindow(QWidget):
                 d = VideoDownloader(link)
                 player = d.get_video_player_link()
                 if len(player) > 0:
-                    encrypted_url = d.get_encrypted_url(player)
-                    if len(encrypted_url) > 0:
-                        decrypted_url = d.decrypt_url(encrypted_url)
-                        self.status_window.update_text(decrypted_url)
+                    print('get player success')
+                    if player.find('yinghua-') != -1:
+                        encrypted_url = d.get_encrypted_url(player)
+                        if len(encrypted_url) > 0:
+                            print('encrypted_url = ' + encrypted_url)
+                            # 线路1，需要解密
+                            decrypted_url = d.decrypt_url(encrypted_url)
+                            print('decrypted_url = ' + decrypted_url)
+                            self.status_window.update_text(decrypted_url)
+                            self.status_window.tmp_name = f'{d.name} {self.combo.currentText()}.mp4'
+                            self.status_window.show()
+                    # 线路2，不需要解密
+                    else:
+                        url = codecs.decode(player, 'unicode_escape').replace('\\/', '/')
+                        self.status_window.update_text(url)
+                        self.status_window.tmp_name = f'{d.name} {self.combo.currentText()}.mp4'
                         self.status_window.show()
 
             except Exception as e:
                 SpiderApp.show_message_box(QMessageBox.Critical, "无法下载视频: " + str(e))
 
-    def update_combo(self, links: list):
+    def update_combo(self, links: list, strs: list):
         self.link_info = links
 
         self.combo.clear()
-        i = 1
-        for it in links:
-            self.combo.addItem(f'第{i}集')
-            i += 1
+        for it in strs:
+            self.combo.addItem(it)
+
 
 class DownloaderStatusWindow(QWidget):
     def __init__(self):
@@ -350,15 +369,64 @@ class DownloaderStatusWindow(QWidget):
 
         layout = QVBoxLayout()
 
-        self.info_label = QLabel('解密完成，你可以复制下面的url到浏览器下载\n 或者点下面的按钮，用爬虫单线下载并保存到本地(可能会造成卡顿)')
+        self.info_label = QLabel(
+            '解密完成，你可以复制下面的url到浏览器下载\n 或者点下面的按钮，用爬虫单线下载并保存到本地(可能会造成卡顿)')
         self.text_edit = QTextEdit()
         self.text_edit.setReadOnly(True)
         self.download_button = QPushButton('单线下载')
+        self.download_button.clicked.connect(self.download_button_clicked)
+
+        self.progress_bar = QProgressBar()
 
         layout.addWidget(self.info_label)
         layout.addWidget(self.text_edit)
-        layout.addWidget(self.download_button)
+        horizon_layout = QHBoxLayout()
+        horizon_layout.addWidget(self.download_button)
+        horizon_layout.addWidget(self.progress_bar)
+        horizon_layout.setStretch(0, 1)
+        horizon_layout.setStretch(1, 3)
+        layout.addLayout(horizon_layout)
         super().setLayout(layout)
 
     def update_text(self, text):
         self.text_edit.setText(text)
+
+    def download_button_clicked(self):
+        try:
+            url = self.text_edit.toPlainText()
+            if len(url) != 0:
+                self.download_button.setEnabled(False)
+
+                os.makedirs(VideoDownloader.save_folder, exist_ok=True)
+                path = f'{VideoDownloader.save_folder}/{self.tmp_name}'
+                # Run the download in a new thread.
+                self.downloader = DownloaderWorker(
+                    url,
+                    path
+                )
+                # Connect the signals which send information about the download
+                # progress with the proper methods of the progress bar.
+                self.downloader.setTotalProgress.connect(self.progress_bar.setMaximum)
+                self.downloader.setCurrentProgress.connect(self.progress_bar.setValue)
+                # Qt will invoke the `succeeded()` method when the file has been
+                # downloaded successfully and `downloadFinished()` when the
+                # child thread finishes.
+                self.downloader.succeeded.connect(self.downloadSucceeded)
+                self.downloader.finished.connect(self.downloadFinished)
+                self.downloader.start()
+        except Exception as e:
+            print(e)
+
+    def downloadSucceeded(self):
+        self.progress_bar.setValue(self.progress_bar.maximum())
+
+    def downloadFinished(self):
+        try:
+            # Restore the button.
+            self.download_button.setEnabled(True)
+            SpiderApp.show_message_box(QMessageBox.Information, '视频已保存到 ' + self.downloader.get_filename())
+
+            # Delete the thread when no longer needed.
+            del self.downloader
+        except Exception as e:
+            print(e)

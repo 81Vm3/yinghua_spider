@@ -3,8 +3,9 @@ import os
 import requests
 from bs4 import BeautifulSoup
 
+from PyQt5.QtCore import QThread, pyqtSignal
+
 from Crypto.Cipher import AES
-from Crypto.Util.Padding import unpad
 import base64
 
 import site_info
@@ -15,8 +16,47 @@ def unpad_pkcs7(data):
     padding_len = data[-1]
     return data[:-padding_len]
 
+class DownloaderWorker(QThread):
+    setTotalProgress = pyqtSignal(int)
+    setCurrentProgress = pyqtSignal(int)
+    succeeded = pyqtSignal()
+
+    def __init__(self, url, filename):
+        super().__init__()
+        self._url = url
+        self._filename = filename
+
+    def run(self):
+        url = self._url
+        filename = self._filename
+        readBytes = 0
+        chunkSize = 1024
+
+        try:
+            with requests.get(url, stream=True) as r:
+                r.raise_for_status()
+                # Tell the window the amount of bytes to be downloaded.
+                self.setTotalProgress.emit(int(r.headers["Content-Length"]))
+                with open(filename, "ab") as f:
+                    for chunk in r.iter_content(chunk_size=chunkSize):
+                        # If the chunk is empty, skip it.
+                        if not chunk:
+                            continue
+                        f.write(chunk)
+                        readBytes += len(chunk)
+                        # Tell the window how many bytes we have received.
+                        self.setCurrentProgress.emit(readBytes)
+            # If this line is reached, then no exception has occurred.
+            self.succeeded.emit()
+        except Exception as e:
+            print(e)
+
+    def get_filename(self):
+        return self._filename
+
+
 class VideoDownloader():
-    __save_folder = 'saved_video'
+    save_folder = 'saved_video'
     def __init__(self, link):
         self.link = link
         self.name = 'unknown'
@@ -50,20 +90,24 @@ class VideoDownloader():
             if sec != -1:
                 key = text[loc + len(key_str):sec]
 
+        print('time = ' + time)
+        print('key = ' + key)
+
         if len(time) == 0 or len(key) == 0:
             return ''
 
-        try:
-            rep = requests.post(site_info.video_url_api, headers=site_info.header, data={
-                'url': link,
-                'time': time,
-                'key': key
-            })
-            rep.raise_for_status()
-            j = json.loads(rep.text)
-            return j['url']
-        except Exception as e:
-            print(e)
+        rep = requests.post(site_info.video_url_api, headers=site_info.header, data={
+            'url': link,
+            'time': time,
+            'key': key
+        })
+        print(rep.text)
+        j = json.loads(rep.text)
+        if j['code'] != 200:
+            raise Exception(j['msg'])
+
+        return j['url']
+
 
     def unpad(self, ct):
         return ct[:-ct[-1]]
@@ -110,8 +154,3 @@ class VideoDownloader():
                         video_url = script[loc+len(target):e]
                         return video_url
         return ''
-
-    def download(self):
-        os.makedirs(VideoDownloader.__save_folder, exist_ok=True)
-
-        path = f'{Anime}/{self.name}.mp4'

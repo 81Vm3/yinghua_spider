@@ -36,6 +36,7 @@ class Anime:
         self.img = img
 
         self.video_links = []
+        self.video_strs = []
 
     def get_info(self):
         if self.has_info:
@@ -66,10 +67,21 @@ class Anime:
 
         videos = soup.find_all('li', class_='hl-col-xs-4 hl-col-sm-2')
         self.video_links.clear()
+        self.video_strs.clear()
+
+        i1 = 1
+        i2 = 1
         for it in videos:
             if it.text.find('集') != -1:
                 a = it.find('a')
                 self.video_links.append(a['href'])
+                self.video_strs.append(f'线路1 - 第{i1}集')
+                i1 += 1
+            if it.text.find('话') != -1:
+                a = it.find('a')
+                self.video_links.append(a['href'])
+                self.video_strs.append(f'线路2 - 第{i2}集')
+                i2 += 1
 
         self.has_info = True
 
@@ -101,7 +113,7 @@ class Anime:
                 'update': self.update
             }
         }
-        return json.dumps(j, indent=4)
+        return json.dumps(j, indent=4, ensure_ascii=False).encode('utf8').decode()
 
     def save_to_json(self):
         d = self.to_json()
